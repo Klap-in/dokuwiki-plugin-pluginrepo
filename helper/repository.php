@@ -174,15 +174,18 @@ class helper_plugin_pluginrepo_repository extends DokuWiki_Plugin {
             if(!is_array($plugins)) {
                 $plugins = array($plugins);
             }
-            $in_requested_plugins = " AND plugin IN (" . substr(str_repeat("?,", count($plugins)), 0, -1).")";
+            $in_requested_plugins = " AND A.plugin IN (" . substr(str_repeat("?,", count($plugins)), 0, -1).")";
             $filter['showissues'] = 'yes';
-            $in_bundled_plugins = "plugin IN (".substr(str_repeat("?,", count($this->bundled)), 0, -1).")";
+            $in_bundled_plugins = "A.plugin IN (".substr(str_repeat("?,", count($this->bundled)), 0, -1).")";
             $in_bundled_values = $this->bundled;
         } else {
             $type = (int) $filter['plugintype'];
             $tag  = strtolower(trim($filter['plugintag']));
-            $placeholders = ':' . implode(',:', $this->bundled);
-            $in_bundled_plugins = "plugin IN (" . $placeholders . ")";
+            foreach ($this->bundled as $bundled_item) {
+                $placeholders .= "'".$bundled_item."',";
+            }
+            $placeholders = substr($placeholders,0,-1);
+            $in_bundled_plugins = "A.plugin IN (" . $placeholders . ")";
 
             foreach($this->bundled as $plugin) {
                 $in_bundled_values[':' . $plugin] = $plugin;
@@ -265,8 +268,19 @@ class helper_plugin_pluginrepo_repository extends DokuWiki_Plugin {
 
         }
 
+        // Make sure to only pass bound values to '$stmt->execute'
+        // which are referenced in $sql. If too many values are passed
+        // then the query will fail.
+        preg_match_all ('/\:[a-zA-Z0-9_]+/', $sql, $bindings);
+        $bound_values = array();
+        foreach ($values as $key => $value) {
+            if (array_search($key, $bindings[0]) !== false) {
+                $bound_values [$key] = $value;
+            }
+        }
+
         $stmt = $db->prepare($sql);
-        $stmt->execute($values);
+        $stmt->execute($bound_values);
         $plugins = $stmt->fetchAll(PDO::FETCH_ASSOC);
         return $plugins;
     }
